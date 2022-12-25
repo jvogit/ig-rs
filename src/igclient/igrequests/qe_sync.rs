@@ -8,12 +8,16 @@ static QE_SYNC: &'static str = "qe/sync/";
 #[derive(Serialize)]
 pub struct QeRequest {
     #[serde(flatten)]
-    pub metadata: super::IGLoggedOutRequestMetadata,
+    pub metadata: super::IGRequestMetadata,
     pub experiments: String,
 }
-impl IGPostRequest<QeResponse> for QeRequest {
+impl IGPostRequest<QeRequest, QeResponse> for QeRequest {
     fn url(&self) -> String {
         format!("{BASE_IG_API_V1}{QE_SYNC}")
+    }
+
+    fn payload(&self) -> &QeRequest {
+        self
     }
 }
 

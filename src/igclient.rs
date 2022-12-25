@@ -1,14 +1,14 @@
 use self::{
     igdevice::IGAndroidDevice,
-    igrequests::IGRequest,
+    igrequests::{accounts_login::LoginResponse, IGRequest},
 };
 use reqwest::{
     cookie::{CookieStore, Jar},
-    header::HeaderValue,
     Client, Url,
 };
-use serde::{de::DeserializeOwned, Serialize, Deserialize};
-use std::sync::Arc;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 static BASE_IG_API_V1: &'static str = "https://i.instagram.com/api/v1/";
@@ -37,26 +37,38 @@ pub enum IGLoginErrorResponse {
 
 pub type Result<T> = std::result::Result<T, IGClientErr>;
 
-pub struct IGLoggedOutClient;
+pub struct IGClient {
+    client: Client,
+    cookie_store: Arc<Jar>,
+    ig_client_config: Arc<RwLock<IGClientConfig>>,
+}
 
-impl IGLoggedOutClient {
-    pub async fn login(username: &str, password: &str) -> Result<IGLoggedInClient> {
+impl IGClient {
+    pub fn new() -> Self {
         let cookie_store = Arc::new(Jar::default());
         let client = Client::builder()
             .cookie_provider(Arc::clone(&cookie_store))
             .build()
             .unwrap();
-        let mut ig_client_config = IGClientConfig {
+        let ig_client_config = IGClientConfig {
             guid: Uuid::new_v4().to_string(),
             device: IGAndroidDevice::new("1234"),
             csrftoken: "missing".to_string(),
             cookies_str: "".to_string(),
         };
-        let qe_sync_response = igrequests::qe_sync::QeRequest {
-            metadata: igrequests::IGLoggedOutRequestMetadata::from(&ig_client_config),
-            experiments:  igconstants::IG_EXPERIMENTS.to_string(),
+
+        IGClient {
+            client,
+            cookie_store,
+            ig_client_config: Arc::new(RwLock::new(ig_client_config)),
         }
-        .send(&client, &mut ig_client_config)
+    }
+    pub async fn login(&self, username: &str, password: &str) -> Result<LoginResponse> {
+        let qe_sync_response = igrequests::qe_sync::QeRequest {
+            metadata: igrequests::IGRequestMetadata::from_client(self).await,
+            experiments: igconstants::IG_EXPERIMENTS.to_string(),
+        }
+        .send(self)
         .await?;
 
         if let igrequests::qe_sync::QeResponse::Fail { .. } = qe_sync_response {
@@ -66,12 +78,12 @@ impl IGLoggedOutClient {
         }
 
         let login_response = igrequests::accounts_login::LoginRequest {
-            metadata: igrequests::IGLoggedOutRequestMetadata::from(&ig_client_config),
+            metadata: igrequests::IGRequestMetadata::from_client(self).await,
             username: username.to_string(),
             enc_password: format!("#PWD_INSTAGRAM:0:&:{password}"),
             login_attempt_account: 0,
         }
-        .send(&client, &mut ig_client_config)
+        .send(self)
         .await?;
 
         if let igrequests::accounts_login::LoginResponse::Fail { .. } = login_response {
@@ -80,62 +92,105 @@ impl IGLoggedOutClient {
             ));
         }
 
-        Ok(IGLoggedInClient {
-            client,
-            cookie_store,
-            ig_client_config,
-        })
+        Ok(login_response)
     }
 
-    pub fn with_ig_client_config(ig_client_config: IGClientConfig) -> IGLoggedInClient {
+    pub async fn with_ig_client_config(ig_client_config: IGClientConfig) -> Result<IGClient> {
         let cookie_store = Arc::new(Jar::default());
-        cookie_store.add_cookie_str(&ig_client_config.cookies_str, &BASE_IG_API_V1.parse::<Url>().unwrap());
+        cookie_store.add_cookie_str(
+            &ig_client_config.cookies_str,
+            &BASE_IG_API_V1.parse::<Url>().unwrap(),
+        );
         let client = Client::builder()
             .cookie_provider(Arc::clone(&cookie_store))
             .build()
             .unwrap();
 
-        IGLoggedInClient {
+        Ok(IGClient {
             client,
             cookie_store,
-            ig_client_config: todo!(),
-        }
+            ig_client_config: Arc::new(RwLock::new(ig_client_config)),
+        })
     }
-}
 
-pub struct IGLoggedInClient {
-    client: Client,
-    cookie_store: Arc<Jar>,
-    pub ig_client_config: IGClientConfig,
-}
+    pub async fn send<Req, Res>(&self, ig_request: &(dyn IGRequest<Req, Res> + Sync)) -> Result<Res>
+    where
+        Req: Serialize,
+        Res: DeserializeOwned,
+    {
+        let payload = serde_json::to_string(ig_request.payload())
+            .expect("body to be able to serialize to JSON");
 
-impl IGLoggedInClient {
+        // TODO: Replace with log
+        // println!("Payload {:#?}", payload);
+
+        let mut params = HashMap::new();
+        // Instagram POST payloads do not require actual signature anymore. Now replaced with "SIGNATURE".
+        params.insert("signed_body", format!("SIGNATURE.{payload}"));
+        let ig_client_config = self.ig_client_config.read().await;
+        let request = self
+            .client
+            .post(ig_request.url())
+            .header("Connection", "close")
+            .header("X-IG-Capabilities", &ig_client_config.device.capabilities)
+            .header("X-IG-App-ID", "567067343352427")
+            .header("User-Agent", &ig_client_config.device.user_agent)
+            .header("X-IG-Device-ID", &ig_client_config.guid)
+            .header("X-IG-Android-ID", &ig_client_config.device.device_id)
+            .form(&params)
+            .build()?;
+        drop(ig_client_config);
+
+        // TODO: Replace with log
+        // println!("Request {:#?}", request);
+        let response = self.client.execute(request).await?;
+        // TODO: Replace with log
+        // println!("Response {:#?}", response);
+        let mut ig_client_config = self.ig_client_config.write().await;
+        if let Some(csrftoken) = get_cookie_value(&response, "csrftoken") {
+            ig_client_config.csrftoken = csrftoken;
+        }
+        if let Some(session_cookies) = self.session_cookies() {
+            ig_client_config.cookies_str = session_cookies;
+        }
+
+        let body = response.json::<Res>().await?;
+
+        Ok(body)
+    }
+
+    pub async fn ig_client_config(&self) -> IGClientConfig {
+        self.ig_client_config.read().await.clone()
+    }
+
+    pub fn blocking_ig_client_config(&self) -> IGClientConfig {
+        self.ig_client_config.blocking_read().clone()
+    }
+
     fn session_cookies(&self) -> Option<String> {
         self.cookie_store
             .cookies(&BASE_IG_API_V1.parse::<Url>().unwrap())
             .map(|hv| hv.to_str().unwrap().to_string())
     }
-
-    pub async fn send<Res>(&mut self, ig_request: &(dyn IGRequest<Res> + Sync)) -> Result<Res>
-    where
-        Res: DeserializeOwned,
-    {
-        let response = ig_request
-            .send(&self.client, &mut self.ig_client_config)
-            .await?;
-        
-        if let Some(session_cookies) = self.session_cookies() {
-            self.ig_client_config.cookies_str = session_cookies;
-        }
-
-        Ok(response)
-    }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IGClientConfig {
-    guid: String,
-    device: IGAndroidDevice,
-    csrftoken: String,
-    cookies_str: String,
+    pub guid: String,
+    pub device: IGAndroidDevice,
+    pub csrftoken: String,
+    pub cookies_str: String,
+}
+
+fn get_cookie_value(response: &reqwest::Response, cookie_name: &str) -> Option<String> {
+    if let Some(cookie) = response
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .map(|hv| cookie::Cookie::parse(hv.to_str().unwrap()).unwrap())
+        .find(|cookie| cookie.name() == cookie_name)
+    {
+        return Some(cookie.value().to_string());
+    }
+    None
 }

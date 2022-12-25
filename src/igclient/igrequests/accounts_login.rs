@@ -8,15 +8,19 @@ static ACCOUNTS_LOGIN: &'static str = "accounts/login/";
 #[derive(Serialize)]
 pub struct LoginRequest {
     #[serde(flatten)]
-    pub metadata: super::IGLoggedOutRequestMetadata,
+    pub metadata: super::IGRequestMetadata,
     pub username: String,
     pub enc_password: String,
     pub login_attempt_account: u32,
 }
 
-impl IGPostRequest<LoginResponse> for LoginRequest {
+impl IGPostRequest<LoginRequest, LoginResponse> for LoginRequest {
     fn url(&self) -> String {
         format!("{BASE_IG_API_V1}{ACCOUNTS_LOGIN}")
+    }
+
+    fn payload(&self) -> &LoginRequest {
+        self
     }
 }
 

@@ -1,3 +1,6 @@
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct IGAndroidDevice {
     pub user_agent: String,
     pub device_id: String,
@@ -12,8 +15,14 @@ impl IGAndroidDevice {
         
         IGAndroidDevice { 
             user_agent: user_agent.to_string(), 
-            device_id: "android-b479836dc7fffd8c".to_string(),
+            device_id: IGAndroidDevice::gen_android_device_id(seed),
             capabilities: "3brTvw==".to_string(),
         }
+    }
+
+    fn gen_android_device_id(seed: &str) -> String {
+        let trunc_digest = &format!("{:x}", md5::compute(seed))[..16];
+
+        format!("android-{trunc_digest}")
     }
 }

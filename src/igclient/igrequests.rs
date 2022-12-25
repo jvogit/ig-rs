@@ -44,7 +44,7 @@ where
         let mut params = HashMap::new();
         // Instagram POST payloads do not require actual signature anymore. Now replaced with "SIGNATURE".
         params.insert("signed_body", format!("SIGNATURE.{payload}"));
-
+        
         let request = client
             .post(self.url())
             .header("Connection", "close")
@@ -67,19 +67,6 @@ where
     }
 }
 
-pub fn get_cookie_value(response: &reqwest::Response, cookie_name: &str) -> Option<String> {
-    if let Some(cookie) = response
-        .headers()
-        .get_all(reqwest::header::SET_COOKIE)
-        .iter()
-        .map(|hv| cookie::Cookie::parse(hv.to_str().unwrap()).unwrap())
-        .find(|cookie| cookie.name() == cookie_name)
-    {
-        return Some(cookie.value().to_string());
-    }
-    None
-}
-
 #[derive(Serialize)]
 pub struct IGLoggedOutRequestMetadata {
     #[serde(rename = "_csrftoken")]
@@ -100,4 +87,17 @@ impl From<&IGClientConfig> for IGLoggedOutRequestMetadata {
             phone_id: value.guid.to_string(),
         }
     }
+}
+
+pub fn get_cookie_value(response: &reqwest::Response, cookie_name: &str) -> Option<String> {
+    if let Some(cookie) = response
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .map(|hv| cookie::Cookie::parse(hv.to_str().unwrap()).unwrap())
+        .find(|cookie| cookie.name() == cookie_name)
+    {
+        return Some(cookie.value().to_string());
+    }
+    None
 }

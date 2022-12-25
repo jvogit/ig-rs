@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::IGPostRequest;
 
-static ACCOUNTS_LOGIN: &'static str = "accounts/login/";
+const ACCOUNTS_LOGIN: &'static str = "accounts/login/";
 
 #[derive(Serialize)]
 pub struct LoginRequest {

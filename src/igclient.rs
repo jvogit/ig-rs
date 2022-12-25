@@ -11,7 +11,7 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-static BASE_IG_API_V1: &'static str = "https://i.instagram.com/api/v1/";
+const BASE_IG_API_V1: &str = "https://i.instagram.com/api/v1/";
 
 pub mod igconstants;
 pub mod igdevice;
@@ -147,7 +147,7 @@ impl IGClient {
         // TODO: Replace with log
         // println!("Response {:#?}", response);
         let mut ig_client_config = self.ig_client_config.write().await;
-        if let Some(csrftoken) = get_cookie_value(&response, "csrftoken") {
+        if let Some(csrftoken) = get_set_cookie_value(&response, "csrftoken") {
             ig_client_config.csrftoken = csrftoken;
         }
         if let Some(session_cookies) = self.session_cookies() {
@@ -182,15 +182,22 @@ pub struct IGClientConfig {
     pub cookies_str: String,
 }
 
-fn get_cookie_value(response: &reqwest::Response, cookie_name: &str) -> Option<String> {
-    if let Some(cookie) = response
+impl IGClientConfig {
+    pub fn get_cookie_value(&self, name: &str) -> Option<String> {
+        self.cookies_str
+            .split("; ")
+            .map(|s| cookie::Cookie::parse(s).expect("Cookie to be parsed"))
+            .find(|cookie| cookie.name() == name)
+            .map(|cookie| cookie.value().to_string())
+    }
+}
+
+fn get_set_cookie_value(response: &reqwest::Response, cookie_name: &str) -> Option<String> {
+    response
         .headers()
         .get_all(reqwest::header::SET_COOKIE)
         .iter()
         .map(|hv| cookie::Cookie::parse(hv.to_str().unwrap()).unwrap())
         .find(|cookie| cookie.name() == cookie_name)
-    {
-        return Some(cookie.value().to_string());
-    }
-    None
+        .map(|cookie| cookie.value().to_string())
 }

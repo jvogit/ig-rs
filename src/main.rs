@@ -24,8 +24,11 @@ async fn get_ig_client() -> Result<IGClient> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = get_ig_client().await?;
-    let ig_client_config_str = serde_json::to_string(&client.ig_client_config().await)
+    let ig_client_config = client.ig_client_config().await;
+    let session_id = ig_client_config.get_cookie_value("sessionid").unwrap();
+    let ig_client_config_str = serde_json::to_string(&ig_client_config)
         .expect("IG_CLIENT_CONFIG to deserialize");
-    println!("{ig_client_config_str}");
+    println!("sessionid={session_id}");
+    println!("IG_CLIENT_CONFIG={ig_client_config_str}");
     Ok(())
 }

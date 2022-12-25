@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::IGPostRequest;
 
-static QE_SYNC: &'static str = "qe/sync/";
+const QE_SYNC: &str = "qe/sync/";
 
 #[derive(Serialize)]
 pub struct QeRequest {

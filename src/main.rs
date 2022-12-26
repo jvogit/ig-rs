@@ -1,4 +1,4 @@
-use ig_rs::igclient::{IGClient, IGClientConfig, Result};
+use ig_rs::igclient::{IGClient, IGClientConfig, Result, igrequests::direct_v2_inbox::DirectV2InboxRequest};
 use std::env;
 
 async fn get_ig_client() -> Result<IGClient> {
@@ -28,7 +28,12 @@ async fn main() -> Result<()> {
     let session_id = ig_client_config.get_cookie_value("sessionid").unwrap();
     let ig_client_config_str = serde_json::to_string(&ig_client_config)
         .expect("IG_CLIENT_CONFIG to deserialize");
+
+    let direct_inbox_res = client.get(&DirectV2InboxRequest {}).await?;
+
+    println!("direct_v2_inbox/: {:#?}", direct_inbox_res);
     println!("sessionid={session_id}");
     println!("IG_CLIENT_CONFIG={ig_client_config_str}");
+    
     Ok(())
 }

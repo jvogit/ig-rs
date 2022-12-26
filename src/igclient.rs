@@ -1,6 +1,6 @@
 use self::{
     igdevice::IGAndroidDevice,
-    igrequests::{accounts_login::LoginResponse, IGRequest},
+    igrequests::{accounts_login::LoginResponse, IGGetRequest, IGPostRequest},
 };
 use reqwest::{
     cookie::{CookieStore, Jar},
@@ -64,12 +64,12 @@ impl IGClient {
         }
     }
     pub async fn login(&self, username: &str, password: &str) -> Result<LoginResponse> {
-        let qe_sync_response = igrequests::qe_sync::QeRequest {
-            metadata: igrequests::IGRequestMetadata::from_client(self).await,
-            experiments: igconstants::IG_EXPERIMENTS.to_string(),
-        }
-        .send(self)
-        .await?;
+        let qe_sync_response = self
+            .post(&igrequests::qe_sync::QeRequest {
+                metadata: igrequests::IGRequestMetadata::from_client(self).await,
+                experiments: igconstants::IG_EXPERIMENTS.to_string(),
+            })
+            .await?;
 
         if let igrequests::qe_sync::QeResponse::Fail { .. } = qe_sync_response {
             return Err(IGClientErr::IGLoginError(
@@ -77,14 +77,14 @@ impl IGClient {
             ));
         }
 
-        let login_response = igrequests::accounts_login::LoginRequest {
-            metadata: igrequests::IGRequestMetadata::from_client(self).await,
-            username: username.to_string(),
-            enc_password: format!("#PWD_INSTAGRAM:0:&:{password}"),
-            login_attempt_account: 0,
-        }
-        .send(self)
-        .await?;
+        let login_response = self
+            .post(&igrequests::accounts_login::LoginRequest {
+                metadata: igrequests::IGRequestMetadata::from_client(self).await,
+                username: username.to_string(),
+                enc_password: format!("#PWD_INSTAGRAM:0:&:{password}"),
+                login_attempt_account: 0,
+            })
+            .await?;
 
         if let igrequests::accounts_login::LoginResponse::Fail { .. } = login_response {
             return Err(IGClientErr::IGLoginError(
@@ -113,21 +113,65 @@ impl IGClient {
         })
     }
 
-    pub async fn send<Req, Res>(&self, ig_request: &(dyn IGRequest<Req, Res> + Sync)) -> Result<Res>
+    pub async fn get<Req, Res>(
+        &self,
+        ig_request: &(dyn IGGetRequest<Req, Res> + Sync),
+    ) -> Result<Res>
+    where
+        Req: Serialize,
+        Res: DeserializeOwned,
+    {
+        let qs = serde_qs::to_string(ig_request.query_strings())
+            .expect("query_strings to be able to serialize to valid query string");
+        // TODO: Replace with log
+        // println!("Payload {:#?}", payload);
+        let ig_client_config = self.ig_client_config().await;
+        let url = ig_request.url();
+        let request = self
+            .client
+            .get(format!("{url}?{qs}"))
+            .header("Connection", "close")
+            .header("X-IG-Capabilities", &ig_client_config.device.capabilities)
+            .header("X-IG-App-ID", "567067343352427")
+            .header("User-Agent", &ig_client_config.device.user_agent)
+            .header("X-IG-Device-ID", &ig_client_config.guid)
+            .header("X-IG-Android-ID", &ig_client_config.device.device_id)
+            .build()?;
+
+        // TODO: Replace with log
+        // println!("Request {:#?}", request);
+        let response = self.client.execute(request).await?;
+        // TODO: Replace with log
+        // println!("Response {:#?}", response);
+        let mut ig_client_config = self.ig_client_config.write().await;
+        if let Some(csrftoken) = get_set_cookie_value(&response, "csrftoken") {
+            ig_client_config.csrftoken = csrftoken;
+        }
+        if let Some(session_cookies) = self.session_cookies() {
+            ig_client_config.cookies_str = session_cookies;
+        }
+
+        let body = response.json::<Res>().await?;
+
+        Ok(body)
+    }
+
+    pub async fn post<Req, Res>(
+        &self,
+        ig_request: &(dyn IGPostRequest<Req, Res> + Sync),
+    ) -> Result<Res>
     where
         Req: Serialize,
         Res: DeserializeOwned,
     {
         let payload = serde_json::to_string(ig_request.payload())
             .expect("body to be able to serialize to JSON");
-
         // TODO: Replace with log
         // println!("Payload {:#?}", payload);
-
         let mut params = HashMap::new();
         // Instagram POST payloads do not require actual signature anymore. Now replaced with "SIGNATURE".
         params.insert("signed_body", format!("SIGNATURE.{payload}"));
-        let ig_client_config = self.ig_client_config.read().await;
+        let ig_client_config = self.ig_client_config().await;
         let request = self
             .client
             .post(ig_request.url())
@@ -139,7 +183,6 @@ impl IGClient {
             .header("X-IG-Android-ID", &ig_client_config.device.device_id)
             .form(&params)
             .build()?;
-        drop(ig_client_config);
 
         // TODO: Replace with log
         // println!("Request {:#?}", request);

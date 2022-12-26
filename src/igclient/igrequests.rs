@@ -1,21 +1,12 @@
-use crate::igclient::{IGClient, Result};
+use crate::igclient::IGClient;
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 
 pub mod accounts_login;
 pub mod qe_sync;
+pub mod direct_v2_inbox;
 
 #[async_trait]
-pub trait IGRequest<Req, Res>
-where
-    Req: Serialize,
-    Res: DeserializeOwned,
-{
-    fn url(&self) -> String;
-    fn payload(&self) -> &Req;
-    async fn send(&self, client: &IGClient) -> Result<Res>;
-}
-
 pub trait IGPostRequest<Req, Res>
 where
     Req: Serialize,
@@ -26,23 +17,13 @@ where
 }
 
 #[async_trait]
-impl<T: IGPostRequest<Req, Res>, Req, Res> IGRequest<Req, Res> for T
+pub trait IGGetRequest<Req, Res>
 where
-    Self: Serialize + Sync,
     Req: Serialize,
     Res: DeserializeOwned,
 {
-    fn payload(&self) -> &Req {
-        self.payload()
-    }
-
-    fn url(&self) -> String {
-        self.url()
-    }
-
-    async fn send(&self, client: &IGClient) -> Result<Res> {
-        Ok(client.send(self).await?)
-    }
+    fn query_strings(&self) -> &Req;
+    fn url(&self) -> String;
 }
 
 #[derive(Serialize)]

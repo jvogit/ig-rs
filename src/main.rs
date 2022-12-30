@@ -1,4 +1,6 @@
-use ig_rs::igclient::{IGClient, IGClientConfig, Result, igrequests::direct_v2_inbox::DirectV2InboxRequest};
+use ig_rs::{igclient::{
+    igrequests::direct_v2_inbox::DirectV2InboxRequest, IGClient, IGClientConfig, Result,
+}, igmqttclient::IGMQTTClient};
 use std::env;
 
 async fn get_ig_client() -> Result<IGClient> {
@@ -22,18 +24,23 @@ async fn get_ig_client() -> Result<IGClient> {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    let client = get_ig_client().await?;
-    let ig_client_config = client.ig_client_config().await;
-    let session_id = ig_client_config.get_cookie_value("sessionid").unwrap();
-    let ig_client_config_str = serde_json::to_string(&ig_client_config)
-        .expect("IG_CLIENT_CONFIG to deserialize");
+async fn main() -> std::result::Result<(), Box<dyn std::error::Error + 'static>> {
+    // let client = get_ig_client().await?;
+    // let ig_client_config = client.ig_client_config().await;
+    // let session_id = ig_client_config.get_cookie_value("sessionid").unwrap();
+    // let ig_client_config_str =
+    //     serde_json::to_string(&ig_client_config).expect("IG_CLIENT_CONFIG to deserialize");
 
-    let direct_inbox_res = client.get(&DirectV2InboxRequest {}).await?;
+    // // let direct_inbox_res = client.get(&DirectV2InboxRequest {}).await?;
 
-    println!("direct_v2_inbox/: {:#?}", direct_inbox_res);
-    println!("sessionid={session_id}");
-    println!("IG_CLIENT_CONFIG={ig_client_config_str}");
-    
+    // // println!("direct_v2_inbox/: {:#?}", direct_inbox_res);
+
+    // println!("sessionid={session_id}");
+    // println!("IG_CLIENT_CONFIG={ig_client_config_str}");
+
+    let mqtt_client = IGMQTTClient::new();
+
+    mqtt_client.connect("").await?;
+
     Ok(())
 }

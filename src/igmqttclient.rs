@@ -1,10 +1,12 @@
 use std::{error::Error, net::SocketAddr, sync::Arc};
 
-use tokio::{net::TcpStream, io::AsyncReadExt};
+use tokio::{net::TcpStream, io::{AsyncReadExt, AsyncWriteExt}};
 use tokio_rustls::{
     rustls::{self},
     TlsConnector,
 };
+
+use self::packets::ConnectPacket;
 
 pub mod packets;
 
@@ -35,9 +37,26 @@ impl IGMQTTClient {
     pub async fn connect(&self, session_id: &str) -> Result<(), Box<dyn Error + 'static>> {
         // TODO: Handle MQTToT
         // edge-mqtt.facebook.com:443
-        let stream = TcpStream::connect("test.mosquitto.org:1883").await?;
+        let mut stream = TcpStream::connect("test.mosquitto.org:1883").await?;
         // TODO: TLS for MQTToT
         // let stream = self.config.connect("edge-mqtt.facebook.com".try_into().expect("Valid DNS name"), stream).await?;
+
+        let connect_packet = ConnectPacket::new().as_bytes();
+
+        println!("Connect packet: {:x}", connect_packet);
+
+        stream.writable().await?;
+
+        let n = stream.write(&connect_packet).await?;
+
+        println!("Wrote {} bytes", n);
+
+        stream.readable().await?;
+
+        let res = stream.read_u8().await?;
+        
+        // Should be 20 (CONNACK)
+        println!("Received byte: {:x}", res);
 
         Ok(())
     }

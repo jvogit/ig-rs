@@ -37,21 +37,17 @@ impl IGMQTTClient {
     pub async fn connect(&self, session_id: &str) -> Result<(), Box<dyn Error + 'static>> {
         // TODO: Handle MQTToT
         // edge-mqtt.facebook.com:443
-        let mut stream = TcpStream::connect("test.mosquitto.org:1883").await?;
+        let stream = TcpStream::connect("broker.hivemq.com:8883").await?;
         // TODO: TLS for MQTToT
-        // let stream = self.config.connect("edge-mqtt.facebook.com".try_into().expect("Valid DNS name"), stream).await?;
+        let mut stream = self.config.connect("broker.hivemq.com".try_into().expect("Valid DNS name"), stream).await?;
 
         let connect_packet = ConnectPacket::new().as_bytes();
 
         println!("Connect packet: {:x}", connect_packet);
 
-        stream.writable().await?;
-
         let n = stream.write(&connect_packet).await?;
 
         println!("Wrote {} bytes", n);
-
-        stream.readable().await?;
 
         let res = stream.read_u8().await?;
         

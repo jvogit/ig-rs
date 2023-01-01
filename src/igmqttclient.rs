@@ -1,6 +1,7 @@
-use std::{error::Error, sync::Arc};
+use std::{error::Error, sync::Arc, io::Write};
 
-use tokio::{net::TcpStream, io::{AsyncReadExt, AsyncWriteExt}, sync::Mutex};
+use bytes::{BytesMut, BufMut, Bytes};
+use tokio::{net::TcpStream, io::{AsyncReadExt, AsyncWriteExt}, sync::{Mutex, MutexGuard}};
 use tokio_rustls::{
     rustls::{self},
     TlsConnector,
@@ -67,22 +68,26 @@ impl IGLoggedInMQTTClient {
         Ok(())
     }
 
-    async fn read_packet(&self) -> Result<(), std::io::Error>{
-        let res = self.stream.lock().await.read_u8().await?;
+    async fn read_packet(&self) -> Result<Bytes, std::io::Error>{
+        let mut stream = self.stream.lock().await;
+        let packet_fixed_header = stream.read_u8().await?;
+        let remaining_length = read_variable_length_encoding(&mut *stream).await?;
+        let mut bytes = BytesMut::with_capacity(remaining_length);
+        stream.read_buf(&mut bytes).await?;
 
-        println!("Received {:x}", res);
+        println!("Received {:x}{:x}", packet_fixed_header, bytes);
 
-        Ok(())
+        Ok(bytes.freeze())
     }
 }
 
-async fn read_variable_length_encoding(stream: &mut TcpStream) -> Result<u32, std::io::Error> {
-    let mut multipler: u32 = 1;
-    let mut value: u32 = 0;
+async fn read_variable_length_encoding(stream: &mut TlsStream<TcpStream>) -> Result<usize, std::io::Error> {
+    let mut multipler: usize = 1;
+    let mut value: usize = 0;
 
     while {
         let encoded_byte: u8 = stream.read_u8().await?;
-        value += Into::<u32>::into(encoded_byte & 127) * multipler;
+        value += Into::<usize>::into(encoded_byte & 127) * multipler;
         multipler *= 128;
 
         if multipler > 128*128*128 {

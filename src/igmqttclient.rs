@@ -1,12 +1,13 @@
-use std::{error::Error, net::SocketAddr, sync::Arc};
+use std::{error::Error, sync::Arc};
 
-use tokio::{net::TcpStream, io::{AsyncReadExt, AsyncWriteExt}};
+use tokio::{net::TcpStream, io::{AsyncReadExt, AsyncWriteExt}, sync::Mutex};
 use tokio_rustls::{
     rustls::{self},
     TlsConnector,
+    client::TlsStream,
 };
 
-use self::packets::ConnectPacket;
+use self::packets::{connect_packet::ConnectPacket, ControlPacket};
 
 pub mod packets;
 
@@ -41,18 +42,35 @@ impl IGMQTTClient {
         // TODO: TLS for MQTToT
         let mut stream = self.config.connect("broker.hivemq.com".try_into().expect("Valid DNS name"), stream).await?;
 
-        let connect_packet = ConnectPacket::new().as_bytes();
+        let logged_in_client = IGLoggedInMQTTClient {
+            stream: Arc::new(Mutex::new(stream)),
+        };
 
-        println!("Connect packet: {:x}", connect_packet);
+        let connect_packet = ConnectPacket::new();
+        println!("Connect packet: {:x}", connect_packet.as_bytes());
+        logged_in_client.send_packet(&connect_packet).await?;
 
-        let n = stream.write(&connect_packet).await?;
+        logged_in_client.read_packet().await?;
 
-        println!("Wrote {} bytes", n);
+        Ok(())
+    }
+}
 
-        let res = stream.read_u8().await?;
-        
-        // Should be 20 (CONNACK)
-        println!("Received byte: {:x}", res);
+pub struct IGLoggedInMQTTClient {
+    stream: Arc<Mutex<TlsStream<TcpStream>>>,
+}
+
+impl IGLoggedInMQTTClient {
+    async fn send_packet(&self, packet: &dyn ControlPacket) -> Result<(), std::io::Error> {
+        self.stream.lock().await.write_all(&packet.as_bytes()).await?;
+
+        Ok(())
+    }
+
+    async fn read_packet(&self) -> Result<(), std::io::Error>{
+        let res = self.stream.lock().await.read_u8().await?;
+
+        println!("Received {:x}", res);
 
         Ok(())
     }

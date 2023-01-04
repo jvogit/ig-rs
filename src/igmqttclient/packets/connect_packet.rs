@@ -34,18 +34,17 @@ impl ControlPacket for ConnectPacket<'_> {
     }
 
     fn payload(&self) -> Bytes {
-        let mut writer = BytesMut::new().writer();
-        let writer_mut = writer.get_mut();
+        let mut writer = BytesMut::new();
 
         // Variable header
-        write_str(self.protocol_name, writer_mut);
-        writer_mut.put_u8(self.protocol_level);
-        writer_mut.put_u8(self.connect_flags);
-        writer_mut.put_u16(self.keep_alive);
+        write_str(self.protocol_name, &mut writer);
+        writer.put_u8(self.protocol_level);
+        writer.put_u8(self.connect_flags);
+        writer.put_u16(self.keep_alive);
 
         // Client ID
-        write_str(self.client_id, writer_mut);
+        write_str(self.client_id, &mut writer);
 
-        writer.into_inner().freeze()
+        writer.freeze()
     }
 }

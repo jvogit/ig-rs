@@ -1,16 +1,22 @@
-use std::{error::Error, sync::Arc, io::Write};
+use std::{error::Error, sync::Arc};
 
-use bytes::{BytesMut, BufMut, Bytes};
-use tokio::{net::TcpStream, io::{AsyncReadExt, AsyncWriteExt}, sync::{Mutex, MutexGuard}};
+use bytes::BytesMut;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    sync::Mutex,
+};
 use tokio_rustls::{
+    client::TlsStream,
     rustls::{self},
     TlsConnector,
-    client::TlsStream,
 };
+
+use crate::igmqttclient::packets::connack_packet::ConnackPacket;
 
 use self::packets::{connect_packet::ConnectPacket, ControlPacket};
 
-pub mod packets;
+mod packets;
 
 pub struct IGMQTTClient {
     config: TlsConnector,
@@ -37,21 +43,30 @@ impl IGMQTTClient {
     }
 
     pub async fn connect(&self, session_id: &str) -> Result<(), Box<dyn Error + 'static>> {
-        // TODO: Handle MQTToT
-        // edge-mqtt.facebook.com:443
+        // TODO: edge-mqtt.facebook.com:443
         let stream = TcpStream::connect("broker.hivemq.com:8883").await?;
-        // TODO: TLS for MQTToT
-        let mut stream = self.config.connect("broker.hivemq.com".try_into().expect("Valid DNS name"), stream).await?;
-
+        let stream = self
+            .config
+            .connect("broker.hivemq.com".try_into().unwrap(), stream)
+            .await?;
         let logged_in_client = IGLoggedInMQTTClient {
             stream: Arc::new(Mutex::new(stream)),
         };
-
         let connect_packet = ConnectPacket::new();
-        println!("Connect packet: {:x}", connect_packet.as_bytes());
-        logged_in_client.send_packet(&connect_packet).await?;
 
-        logged_in_client.read_packet().await?;
+        println!("Connect packet: {:x}", connect_packet.as_bytes());
+
+        logged_in_client.send_packet(&connect_packet).await?;
+        if let Some(connack_packet) = logged_in_client
+            .read_packet()
+            .await?
+            .downcast_ref::<ConnackPacket>()
+        {
+            println!(
+                "Received connack return code {}",
+                connack_packet.return_code
+            );
+        }
 
         Ok(())
     }
@@ -63,25 +78,42 @@ pub struct IGLoggedInMQTTClient {
 
 impl IGLoggedInMQTTClient {
     async fn send_packet(&self, packet: &dyn ControlPacket) -> Result<(), std::io::Error> {
-        self.stream.lock().await.write_all(&packet.as_bytes()).await?;
+        self.stream
+            .lock()
+            .await
+            .write_all(&packet.as_bytes())
+            .await?;
 
         Ok(())
     }
 
-    async fn read_packet(&self) -> Result<Bytes, std::io::Error>{
+    async fn read_packet(&self) -> Result<Box<dyn std::any::Any>, std::io::Error> {
         let mut stream = self.stream.lock().await;
         let packet_fixed_header = stream.read_u8().await?;
+        let control_packet_type = packet_fixed_header >> 4;
         let remaining_length = read_variable_length_encoding(&mut *stream).await?;
         let mut bytes = BytesMut::with_capacity(remaining_length);
         stream.read_buf(&mut bytes).await?;
+        let bytes = bytes.freeze();
 
         println!("Received {:x}{:x}", packet_fixed_header, bytes);
 
-        Ok(bytes.freeze())
+        return match control_packet_type {
+            ConnackPacket::PACKET_TYPE => Ok(Box::new(ConnackPacket::from(bytes))),
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "Expected valid control packet type instead of {:x}",
+                    control_packet_type
+                ),
+            )),
+        };
     }
 }
 
-async fn read_variable_length_encoding(stream: &mut TlsStream<TcpStream>) -> Result<usize, std::io::Error> {
+async fn read_variable_length_encoding(
+    stream: &mut TlsStream<TcpStream>,
+) -> Result<usize, std::io::Error> {
     let mut multipler: usize = 1;
     let mut value: usize = 0;
 
@@ -90,11 +122,12 @@ async fn read_variable_length_encoding(stream: &mut TlsStream<TcpStream>) -> Res
         value += Into::<usize>::into(encoded_byte & 127) * multipler;
         multipler *= 128;
 
-        if multipler > 128*128*128 {
-            // throw error
-            panic!("Malformed length");
+        if multipler > 128 * 128 * 128 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Expected nonmalformed variable length encoding!",
+            ));
         }
-
 
         (encoded_byte & 128) != 0
     } {}

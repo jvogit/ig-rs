@@ -11,6 +11,8 @@ pub struct ConnectPacket<'a> {
 }
 
 impl ConnectPacket<'_> {
+    pub const PACKET_TYPE: u8 = 1u8;
+
     pub fn new() -> Self {
         ConnectPacket {
             protocol_name: "MQTT",
@@ -24,7 +26,7 @@ impl ConnectPacket<'_> {
 
 impl ControlPacket for ConnectPacket<'_> {
     fn packet_type(&self) -> u8 {
-        1u8
+        ConnectPacket::PACKET_TYPE
     }
 
     fn flags(&self) -> u8 {
@@ -35,7 +37,7 @@ impl ControlPacket for ConnectPacket<'_> {
         let mut writer = BytesMut::new().writer();
         let writer_mut = writer.get_mut();
 
-        // Variable header 
+        // Variable header
         write_str(self.protocol_name, writer_mut);
         writer_mut.put_u8(self.protocol_level);
         writer_mut.put_u8(self.connect_flags);

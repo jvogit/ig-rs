@@ -1,5 +1,6 @@
 use bytes::{BufMut, Bytes, BytesMut};
 
+pub mod connack_packet;
 pub mod connect_packet;
 
 pub trait ControlPacket {

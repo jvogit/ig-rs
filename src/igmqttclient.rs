@@ -1,6 +1,6 @@
-use std::{error::Error, sync::Arc};
-
 use bytes::BytesMut;
+use packets::{connack_packet::ConnackPacket, connect_packet::ConnectPacket, ControlPacket};
+use std::{error::Error, sync::Arc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -12,11 +12,8 @@ use tokio_rustls::{
     TlsConnector,
 };
 
-use crate::igmqttclient::packets::connack_packet::ConnackPacket;
-
-use self::packets::{connect_packet::ConnectPacket, ControlPacket};
-
 mod packets;
+mod payloads;
 
 pub struct IGMQTTClient {
     config: TlsConnector,

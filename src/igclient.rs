@@ -51,6 +51,7 @@ impl IGClient {
             .build()
             .unwrap();
         let ig_client_config = IGClientConfig {
+            pk: 0,
             guid: Uuid::new_v4().to_string(),
             device: IGAndroidDevice::new("1234"),
             csrftoken: "missing".to_string(),
@@ -63,6 +64,7 @@ impl IGClient {
             ig_client_config: Arc::new(RwLock::new(ig_client_config)),
         }
     }
+
     pub async fn login(&self, username: &str, password: &str) -> Result<LoginResponse> {
         let qe_sync_response = self
             .post(&igrequests::qe_sync::QeRequest {
@@ -86,13 +88,17 @@ impl IGClient {
             })
             .await?;
 
-        if let igrequests::accounts_login::LoginResponse::Fail { .. } = login_response {
+        if let igrequests::accounts_login::LoginResponse::Ok { ref logged_in_user } = login_response {
+            let pk: u64 = logged_in_user.get("pk").unwrap().as_u64().unwrap();
+            
+            self.ig_client_config.write().await.pk = pk;
+
+            return Ok(login_response);
+        } else {
             return Err(IGClientErr::IGLoginError(
                 IGLoginErrorResponse::AccountsLoginResponse(login_response),
             ));
         }
-
-        Ok(login_response)
     }
 
     pub async fn with_ig_client_config(ig_client_config: IGClientConfig) -> Result<IGClient> {
@@ -223,6 +229,7 @@ pub struct IGClientConfig {
     pub device: IGAndroidDevice,
     pub csrftoken: String,
     pub cookies_str: String,
+    pub pk: u64,
 }
 
 impl IGClientConfig {

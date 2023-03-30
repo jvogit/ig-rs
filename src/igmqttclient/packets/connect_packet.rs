@@ -7,19 +7,24 @@ pub struct ConnectPacket<'a> {
     protocol_level: u8,
     connect_flags: u8,
     keep_alive: u16,
-    client_id: &'a str,
+    connect_payload: Bytes,
 }
 
 impl ConnectPacket<'_> {
     pub const PACKET_TYPE: u8 = 1u8;
 
     pub fn new() -> Self {
+        let mut writer = BytesMut::new();
+
+        write_str("jdhhkhjke", &mut writer);
+
         ConnectPacket {
-            protocol_name: "MQTT",
-            protocol_level: 4,
-            connect_flags: 2,
+            protocol_name: "MQTToT",
+            protocol_level: 3,
+            // CONNECT FLAGS: 11000010
+            connect_flags: 194,
             keep_alive: 20,
-            client_id: "hkdjhjkej",
+            connect_payload: writer.freeze(),
         }
     }
 }
@@ -42,8 +47,10 @@ impl ControlPacket for ConnectPacket<'_> {
         writer.put_u8(self.connect_flags);
         writer.put_u16(self.keep_alive);
 
-        // Client ID
-        write_str(self.client_id, &mut writer);
+        // Write "connect payload"
+        // For standard MQTT connect packet this is just the client_id
+        // For MQTToT connect packet, it is zipped thrift connect_payload
+        writer.put(self.connect_payload.clone());
 
         writer.freeze()
     }

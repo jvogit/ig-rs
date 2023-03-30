@@ -1,4 +1,6 @@
 use bytes::{BufMut, Bytes, BytesMut};
+use thrift::protocol::{TSerializable, TBinaryOutputProtocol};
+use crate::igmqttclient::{bytes_mut_channel::BytesMutChannel, payloads::connect_payload::ConnectPayload};
 
 use super::{write_str, ControlPacket};
 
@@ -14,9 +16,11 @@ impl ConnectPacket<'_> {
     pub const PACKET_TYPE: u8 = 1u8;
 
     pub fn new() -> Self {
-        let mut writer = BytesMut::new();
+        let mut bytes_mut_channel = BytesMutChannel::new();
+        let mut out_protocol = TBinaryOutputProtocol::new(&mut bytes_mut_channel, false);
+        let connect_payload = ConnectPayload::new(None, None, None, None);
 
-        write_str("jdhhkhjke", &mut writer);
+        connect_payload.write_to_out_protocol(&mut out_protocol).expect("Connect payload to successfuly write");
 
         ConnectPacket {
             protocol_name: "MQTToT",
@@ -24,7 +28,7 @@ impl ConnectPacket<'_> {
             // CONNECT FLAGS: 11000010
             connect_flags: 194,
             keep_alive: 20,
-            connect_payload: writer.freeze(),
+            connect_payload: bytes_mut_channel.into_bytes(),
         }
     }
 }

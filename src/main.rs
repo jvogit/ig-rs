@@ -39,8 +39,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error + 'static>>
     // println!("IG_CLIENT_CONFIG={ig_client_config_str}");
 
     let mqtt_client = IGMQTTClient::new();
-
-    mqtt_client.connect("").await?;
+    let ig_client_config = serde_json::from_str::<IGClientConfig>(&env::var("IG_CLIENT_CONFIG").unwrap()[..]).unwrap();
+    mqtt_client.connect(ig_client_config).await?;
 
     Ok(())
 }

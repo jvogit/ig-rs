@@ -1,11 +1,11 @@
 use bytes::{BytesMut, BufMut, Bytes};
 use std::io;
 
-pub struct BytesMutChannel {
+pub struct BytesMutWriteTransport {
     bytes: BytesMut,
 }
 
-impl BytesMutChannel {
+impl BytesMutWriteTransport {
     pub fn new() -> Self {
         Self {
             bytes: BytesMut::new(),
@@ -17,7 +17,7 @@ impl BytesMutChannel {
     }
 }
 
-impl io::Write for BytesMutChannel {
+impl io::Write for BytesMutWriteTransport {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.bytes.put(buf);
 

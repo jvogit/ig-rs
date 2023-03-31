@@ -12,7 +12,9 @@ use tokio_rustls::{
     TlsConnector,
 };
 
-mod bytes_mut_channel;
+use crate::igclient::IGClientConfig;
+
+mod bytes_mut_write_transport;
 mod packets;
 mod payloads;
 
@@ -40,21 +42,23 @@ impl IGMQTTClient {
         }
     }
 
-    pub async fn connect(&self, session_id: &str) -> Result<(), Box<dyn Error + 'static>> {
+    pub async fn connect(&self, ig_client_config: IGClientConfig) -> Result<(), Box<dyn Error + 'static>> {
         // TODO: edge-mqtt.facebook.com:443
-        let stream = TcpStream::connect("broker.hivemq.com:8883").await?;
+        let stream = TcpStream::connect("edge-mqtt.facebook.com:443").await?;
         let stream = self
             .config
-            .connect("broker.hivemq.com".try_into().unwrap(), stream)
+            .connect("edge-mqtt.facebook.com".try_into().unwrap(), stream)
             .await?;
         let logged_in_client = IGLoggedInMQTTClient {
             stream: Arc::new(Mutex::new(stream)),
+            ig_client_config,
         };
-        let connect_packet = ConnectPacket::new();
+        let connect_packet = ConnectPacket::new(&logged_in_client.ig_client_config);
 
-        println!("Connect packet: {:x}", connect_packet.as_bytes());
+        println!("Connect packet: {:x}", &connect_packet.as_bytes());
 
         logged_in_client.send_packet(&connect_packet).await?;
+
         if let Some(connack_packet) = logged_in_client
             .read_packet()
             .await?
@@ -72,6 +76,7 @@ impl IGMQTTClient {
 
 pub struct IGLoggedInMQTTClient {
     stream: Arc<Mutex<TlsStream<TcpStream>>>,
+    ig_client_config: IGClientConfig,
 }
 
 impl IGLoggedInMQTTClient {

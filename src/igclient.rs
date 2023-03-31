@@ -51,7 +51,7 @@ impl IGClient {
             .build()
             .unwrap();
         let ig_client_config = IGClientConfig {
-            pk: 0,
+            pk: -1,
             guid: Uuid::new_v4().to_string(),
             device: IGAndroidDevice::new("1234"),
             csrftoken: "missing".to_string(),
@@ -89,7 +89,7 @@ impl IGClient {
             .await?;
 
         if let igrequests::accounts_login::LoginResponse::Ok { ref logged_in_user } = login_response {
-            let pk: u64 = logged_in_user.get("pk").unwrap().as_u64().unwrap();
+            let pk = logged_in_user.get("pk").unwrap().as_i64().unwrap();
             
             self.ig_client_config.write().await.pk = pk;
 
@@ -229,7 +229,7 @@ pub struct IGClientConfig {
     pub device: IGAndroidDevice,
     pub csrftoken: String,
     pub cookies_str: String,
-    pub pk: u64,
+    pub pk: i64,
 }
 
 impl IGClientConfig {

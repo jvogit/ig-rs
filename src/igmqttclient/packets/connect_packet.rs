@@ -8,7 +8,7 @@ use crate::{
 use bytes::{BufMut, Bytes, BytesMut};
 use miniz_oxide::deflate::compress_to_vec_zlib;
 use std::time::{SystemTime, UNIX_EPOCH};
-use thrift::protocol::{TBinaryOutputProtocol, TCompactOutputProtocol, TSerializable};
+use thrift::protocol::{TCompactOutputProtocol, TSerializable};
 
 use super::{write_str, ControlPacket};
 
@@ -20,12 +20,13 @@ pub struct ConnectPacket<'a> {
     connect_payload: Bytes,
 }
 
+/// MQTT 3.1.1 Spec CONNECT packet
 impl ConnectPacket<'_> {
     pub const PACKET_TYPE: u8 = 1u8;
 
     pub fn new(ig_client_config: &IGClientConfig) -> Self {
-        let mut bytes_mut_transport = BytesMutWriteTransport::new();
-        let mut out_protocol = TCompactOutputProtocol::new(&mut bytes_mut_transport);
+        // Construct thrift Connect Payload w/ ig client config details
+        // Connect payload uses cookie authorization (sessionid cookie)
         let connect_payload = ConnectPayload::new(
             Some((&ig_client_config.device.device_id[..20]).into()),
             Some(Box::new(ClientInfo::new(
@@ -72,13 +73,16 @@ impl ConnectPacket<'_> {
                 ].iter().cloned().collect()
             ),
         );
-        connect_payload
-            .write_to_out_protocol(&mut out_protocol)
-            .expect("Connect payload to successfuly write");
-        let bytes = bytes_mut_transport.into_bytes();
-        println!("ConnectPayload HEX {:x}", bytes);
+        let mut write_transport = BytesMutWriteTransport::new();
 
-        let connect_payload = compress_to_vec_zlib(&bytes, 9);
+        // using thrift compact protocol to write the connect payload to Bytes object
+        connect_payload
+            .write_to_out_protocol(&mut TCompactOutputProtocol::new(&mut write_transport))
+            .expect("Connect payload to successfuly write to transport");
+
+        let connect_payload = write_transport.into_bytes();
+        // zip the connect payload
+        let connect_payload = compress_to_vec_zlib(&connect_payload, 9);
 
         ConnectPacket {
             protocol_name: "MQTToT",
@@ -86,6 +90,7 @@ impl ConnectPacket<'_> {
             // CONNECT FLAGS: 11000010
             connect_flags: 194,
             keep_alive: 20,
+            // In "MQTToT" the payload is a zipped thrift payload 
             connect_payload: connect_payload.into(),
         }
     }
@@ -103,15 +108,13 @@ impl ControlPacket for ConnectPacket<'_> {
     fn payload(&self) -> Bytes {
         let mut writer = BytesMut::new();
 
-        // Variable header
+        // Write connect packet variable header
         write_str(self.protocol_name, &mut writer);
         writer.put_u8(self.protocol_level);
         writer.put_u8(self.connect_flags);
         writer.put_u16(self.keep_alive);
-
-        // Write "connect payload"
-        // For standard MQTT connect packet this is just the client_id
-        // For MQTToT connect packet, it is zipped thrift connect_payload
+        
+        // Write connect packet payload
         writer.put(self.connect_payload.clone());
 
         writer.freeze()

@@ -9,6 +9,14 @@ pub struct ConnackPacket {
 
 impl ConnackPacket {
     pub const PACKET_TYPE: u8 = 2u8;
+
+    pub fn from_payload(payload: Bytes) -> Self {
+        assert!(payload.len() == 2, "Payload needs length of 2 for ConnackPacket");
+        Self {
+            session_present: (payload[0] & 1u8) == 1u8,
+            return_code: payload[1],
+        }
+    }
 }
 
 impl ControlPacket for ConnackPacket {
@@ -20,17 +28,7 @@ impl ControlPacket for ConnackPacket {
         0u8
     }
 
-    fn payload(&self) -> bytes::Bytes {
+    fn payload(&self) -> Bytes {
         vec![self.session_present as u8, self.return_code].into()
-    }
-}
-
-impl From<Bytes> for ConnackPacket {
-    fn from(value: Bytes) -> Self {
-        assert!(value.len() == 2, "Bytes need length of 2 for ConnackPacket");
-        ConnackPacket {
-            session_present: (value[0] & 1u8) == 1u8,
-            return_code: value[1],
-        }
     }
 }

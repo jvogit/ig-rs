@@ -1,6 +1,9 @@
-use ig_rs::{igclient::{
-    igrequests::direct_v2_inbox::DirectV2InboxRequest, IGClient, IGClientConfig, Result,
-}, igmqttclient::IGMQTTClient};
+use ig_rs::{
+    igclient::{
+        igrequests::direct_v2_inbox::DirectV2InboxRequest, IGClient, IGClientConfig, Result,
+    },
+    igmqttclient::{IGMQTTClient, IGMQTTClientErr},
+};
 use std::env;
 
 async fn get_ig_client() -> Result<IGClient> {
@@ -24,7 +27,7 @@ async fn get_ig_client() -> Result<IGClient> {
 }
 
 #[tokio::main]
-async fn main() -> std::result::Result<(), Box<dyn std::error::Error + 'static>> {
+async fn main() -> std::result::Result<(), IGMQTTClientErr> {
     // let client = get_ig_client().await?;
     // let ig_client_config = client.ig_client_config().await;
     // let session_id = ig_client_config.get_cookie_value("sessionid").unwrap();
@@ -39,7 +42,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error + 'static>>
     // println!("IG_CLIENT_CONFIG={ig_client_config_str}");
 
     let mqtt_client = IGMQTTClient::new();
-    let ig_client_config = serde_json::from_str::<IGClientConfig>(&env::var("IG_CLIENT_CONFIG").unwrap()[..]).unwrap();
+    let ig_client_config =
+        serde_json::from_str::<IGClientConfig>(&env::var("IG_CLIENT_CONFIG").unwrap()[..]).unwrap();
     mqtt_client.connect(ig_client_config).await?;
 
     Ok(())

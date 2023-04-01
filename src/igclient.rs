@@ -19,13 +19,13 @@ pub mod igrequests;
 
 #[derive(Debug)]
 pub enum IGClientErr {
-    HTTPClientError(reqwest::Error),
+    HTTPClientRequestError(reqwest::Error),
     IGLoginError(IGLoginErrorResponse),
 }
 
 impl From<reqwest::Error> for IGClientErr {
     fn from(error: reqwest::Error) -> Self {
-        return IGClientErr::HTTPClientError(error);
+        return IGClientErr::HTTPClientRequestError(error);
     }
 }
 

@@ -1,6 +1,7 @@
 use bytes::{BytesMut, BufMut, Bytes};
 use std::io;
 
+/// A write transport used for thrift output protocols that writes to an internal ByteMut object
 pub struct BytesMutWriteTransport {
     bytes: BytesMut,
 }
@@ -25,6 +26,7 @@ impl io::Write for BytesMutWriteTransport {
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        // no action needed when flushing
         Ok(())
     }
 }

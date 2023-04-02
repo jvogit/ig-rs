@@ -1,6 +1,6 @@
 use self::{
     igdevice::IGAndroidDevice,
-    igrequests::{accounts_login::LoginResponse, IGGetRequest, IGPostRequest},
+    igrequests::{accounts_login::LoginResponse, IGGetRequest, IGPostRequest, IGRequestMetadata},
 };
 use reqwest::{
     cookie::{CookieStore, Jar},
@@ -67,10 +67,9 @@ impl IGClient {
 
     pub async fn login(&self, username: &str, password: &str) -> Result<LoginResponse> {
         let qe_sync_response = self
-            .post(&igrequests::qe_sync::QeRequest {
-                metadata: igrequests::IGRequestMetadata::from_client(self).await,
-                experiments: igconstants::IG_EXPERIMENTS.to_string(),
-            })
+            .post(&igrequests::qe_sync::QeRequest::new(
+                igconstants::IG_EXPERIMENTS.to_string(),
+            ))
             .await?;
 
         if let igrequests::qe_sync::QeResponse::Fail { .. } = qe_sync_response {
@@ -80,17 +79,17 @@ impl IGClient {
         }
 
         let login_response = self
-            .post(&igrequests::accounts_login::LoginRequest {
-                metadata: igrequests::IGRequestMetadata::from_client(self).await,
-                username: username.to_string(),
-                enc_password: format!("#PWD_INSTAGRAM:0:&:{password}"),
-                login_attempt_account: 0,
-            })
+            .post(&igrequests::accounts_login::LoginRequest::new(
+                username.to_string(),
+                format!("#PWD_INSTAGRAM:0:&:{password}"),
+                0,
+            ))
             .await?;
 
-        if let igrequests::accounts_login::LoginResponse::Ok { ref logged_in_user } = login_response {
+        if let igrequests::accounts_login::LoginResponse::Ok { ref logged_in_user } = login_response
+        {
             let pk = logged_in_user.get("pk").unwrap().as_i64().unwrap();
-            
+
             self.ig_client_config.write().await.pk = pk;
 
             return Ok(login_response);
@@ -103,10 +102,9 @@ impl IGClient {
 
     pub async fn with_ig_client_config(ig_client_config: IGClientConfig) -> Result<IGClient> {
         let cookie_store = Arc::new(Jar::default());
-        cookie_store.add_cookie_str(
-            &ig_client_config.cookies_str,
-            &BASE_IG_API_V1.parse::<Url>().unwrap(),
-        );
+        
+        ig_client_config.cookies_str.split("; ").for_each(|s| cookie_store.add_cookie_str(s, &BASE_IG_API_V1.parse::<Url>().unwrap()));
+
         let client = Client::builder()
             .cookie_provider(Arc::clone(&cookie_store))
             .build()
@@ -127,7 +125,7 @@ impl IGClient {
         Req: Serialize,
         Res: DeserializeOwned,
     {
-        let qs = serde_qs::to_string(ig_request.query_strings())
+        let qs = serde_qs::to_string(&ig_request.query_strings())
             .expect("query_strings to be able to serialize to valid query string");
         // TODO: Replace with log
         // println!("Payload {:#?}", payload);
@@ -170,8 +168,9 @@ impl IGClient {
         Req: Serialize,
         Res: DeserializeOwned,
     {
-        let payload = serde_json::to_string(ig_request.payload())
-            .expect("body to be able to serialize to JSON");
+        let payload =
+            serde_json::to_string(&ig_request.payload(IGRequestMetadata::from_client(self).await))
+                .expect("body to be able to serialize to JSON");
         // TODO: Replace with log
         // println!("Payload {:#?}", payload);
         let mut params = HashMap::new();

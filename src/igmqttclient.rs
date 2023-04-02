@@ -133,7 +133,7 @@ impl IGLoggedInMQTTClient {
                 }
                 Err(err) => {
                     println!("Error occured during read packet task: {:?}", err);
-                    break;
+                    continue;
                 }
             }
         }

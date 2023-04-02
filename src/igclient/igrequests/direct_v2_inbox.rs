@@ -5,16 +5,22 @@ use super::IGGetRequest;
 
 const DIRECT_V2_INBOX: &'static str = "direct_v2/inbox/";
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct DirectV2InboxRequest {}
+
+impl DirectV2InboxRequest {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl IGGetRequest<DirectV2InboxRequest, DirectV2InboxResponse> for DirectV2InboxRequest {
     fn url(&self) -> String {
         format!("{BASE_IG_API_V1}{DIRECT_V2_INBOX}")
     }
 
-    fn query_strings(&self) -> &DirectV2InboxRequest {
-        self
+    fn query_strings(&self) -> DirectV2InboxRequest {
+        self.clone()
     }
 }
 

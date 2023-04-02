@@ -12,7 +12,7 @@ where
     Req: Serialize,
     Res: DeserializeOwned,
 {
-    fn payload(&self) -> &Req;
+    fn payload(&self, req_metadata: IGRequestMetadata) -> Req;
     fn url(&self) -> String;
 }
 
@@ -22,11 +22,11 @@ where
     Req: Serialize,
     Res: DeserializeOwned,
 {
-    fn query_strings(&self) -> &Req;
+    fn query_strings(&self) -> Req;
     fn url(&self) -> String;
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct IGRequestMetadata {
     #[serde(rename = "_csrftoken")]
     pub csrftoken: String,

@@ -1,23 +1,37 @@
 use crate::igclient::BASE_IG_API_V1;
 use serde::{Deserialize, Serialize};
 
-use super::IGPostRequest;
+use super::{IGPostRequest, IGRequestMetadata};
 
 const QE_SYNC: &str = "qe/sync/";
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct QeRequest {
+    #[serde(default)]
     #[serde(flatten)]
-    pub metadata: super::IGRequestMetadata,
+    pub metadata: Option<super::IGRequestMetadata>,
     pub experiments: String,
 }
+
+impl QeRequest {
+    pub fn new(experiments: String) -> Self {
+        Self {
+            metadata: None,
+            experiments,
+        }
+    }
+}
+
 impl IGPostRequest<QeRequest, QeResponse> for QeRequest {
     fn url(&self) -> String {
         format!("{BASE_IG_API_V1}{QE_SYNC}")
     }
 
-    fn payload(&self) -> &QeRequest {
-        self
+    fn payload(&self, req_metadata: IGRequestMetadata) -> QeRequest {
+        Self {
+            metadata: Some(req_metadata),
+            ..self.clone()
+        }
     }
 }
 

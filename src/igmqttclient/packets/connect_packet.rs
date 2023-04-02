@@ -2,7 +2,7 @@ use crate::{
     igclient::IGClientConfig,
     igmqttclient::{
         bytes_mut_write_transport::BytesMutWriteTransport,
-        payloads::connect_payload::{ClientInfo, ConnectPayload},
+        payloads::connect_payload::{ClientInfo, ConnectPayload}, utils::write_str,
     },
 };
 use bytes::{BufMut, Bytes, BytesMut};
@@ -10,7 +10,7 @@ use miniz_oxide::deflate::compress_to_vec_zlib;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thrift::protocol::{TCompactOutputProtocol, TSerializable};
 
-use super::{write_str, ControlPacket};
+use super::ControlPacket;
 
 pub struct ConnectPacket<'a> {
     protocol_name: &'a str,
@@ -90,7 +90,7 @@ impl ConnectPacket<'_> {
             // CONNECT FLAGS: 11000010
             connect_flags: 194,
             keep_alive: 20,
-            // In "MQTToT" the payload is a zipped thrift payload 
+            // In "MQTToT" the payload is a zipped thrift payload
             connect_payload: connect_payload.into(),
         }
     }
@@ -113,7 +113,7 @@ impl ControlPacket for ConnectPacket<'_> {
         writer.put_u8(self.protocol_level);
         writer.put_u8(self.connect_flags);
         writer.put_u16(self.keep_alive);
-        
+
         // Write connect packet payload
         writer.put(self.connect_payload.clone());
 

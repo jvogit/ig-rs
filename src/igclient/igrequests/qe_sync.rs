@@ -9,7 +9,7 @@ const QE_SYNC: &str = "qe/sync/";
 pub struct QeRequest {
     #[serde(default)]
     #[serde(flatten)]
-    pub metadata: Option<super::IGRequestMetadata>,
+    metadata: Option<super::IGRequestMetadata>,
     pub experiments: String,
 }
 

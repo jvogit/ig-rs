@@ -1,6 +1,11 @@
+use self::{
+    packets::{pingreq_packet::PingReqPacket, pingres_packet::PingResPacket},
+    utils::read_variable_length_encoding,
+};
+use crate::igclient::IGClientConfig;
 use bytes::BytesMut;
 use packets::{connack_packet::ConnackPacket, connect_packet::ConnectPacket, ControlPacket};
-use std::{fs::read, sync::Arc};
+use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,
@@ -12,14 +17,10 @@ use tokio_rustls::{
     TlsConnector,
 };
 
-use crate::{
-    igclient::IGClientConfig,
-    igmqttclient::packets::{pingreq_packet::PingReqPacket, pingres_packet::PingResPacket},
-};
-
 mod bytes_mut_write_transport;
 mod packets;
 mod payloads;
+mod utils;
 
 #[derive(Debug)]
 pub enum IGMQTTClientErr {
@@ -98,7 +99,7 @@ impl IGMQTTClient {
     }
 }
 
-pub struct IGLoggedInMQTTClient {
+struct IGLoggedInMQTTClient {
     reader_stream: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     writer_stream: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     ig_client_config: IGClientConfig,
@@ -174,25 +175,4 @@ impl IGLoggedInMQTTClient {
             _ => Err(IGMQTTClientErr::UnknownPacketType(control_packet_type)),
         };
     }
-}
-
-async fn read_variable_length_encoding(
-    stream: &mut ReadHalf<TlsStream<TcpStream>>,
-) -> Result<usize> {
-    let mut multipler: usize = 1;
-    let mut value: usize = 0;
-
-    while {
-        let encoded_byte: u8 = stream.read_u8().await?;
-        value += Into::<usize>::into(encoded_byte & 127) * multipler;
-        multipler *= 128;
-
-        if multipler > 128 * 128 * 128 {
-            panic!("Expected nonmalformed variable length encoding!");
-        }
-
-        (encoded_byte & 128) != 0
-    } {}
-
-    Ok(value)
 }

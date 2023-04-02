@@ -1,5 +1,7 @@
 use bytes::{BufMut, Bytes, BytesMut};
 
+use super::utils::write_variable_length_encoding;
+
 pub mod connack_packet;
 pub mod connect_packet;
 pub mod pingreq_packet;
@@ -30,33 +32,4 @@ pub trait ControlPacket {
 
         writer.freeze()
     }
-}
-
-/// MQTT 3.1.1 Spec string byte encoding
-fn write_str(value: &str, writer: &mut BytesMut) {
-    let length: u16 = value.len() as u16;
-    writer.put_u16(length);
-    writer.put_slice(value.as_bytes());
-}
-
-/// MQTT 3.1.1 Spec Variable Length byte encoding
-fn write_variable_length_encoding(value: usize, writer: &mut BytesMut) {
-    assert!(
-        value <= 268_435_455,
-        "value exceeds maximum allowed: 268435455"
-    );
-
-    let mut x = value;
-    while {
-        let mut encoded_byte: u8 = (x % 128) as u8;
-        x /= 128;
-
-        if x > 0 {
-            encoded_byte |= 128;
-        }
-
-        writer.put_u8(encoded_byte);
-
-        x > 0
-    } {}
 }

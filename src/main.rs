@@ -51,7 +51,7 @@ async fn get_ig_client() -> Result<IGClient, IGCLIErr> {
         let ig_client_config = serde_json::from_str::<IGClientConfig>(&ig_client_config)
             .expect("IG_CLIENT_CONFIG should be valid JSON!");
 
-        return Ok(IGClient::with_ig_client_config(ig_client_config).await?);
+        return Ok(IGClient::from_ig_client_config(ig_client_config).await?);
     } else if let (Ok(username), Ok(password)) = (username, password) {
         let client = IGClient::new();
         client.login(&username, &password).await?;

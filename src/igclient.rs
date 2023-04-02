@@ -1,6 +1,7 @@
 use self::{
     igdevice::IGAndroidDevice,
     igrequests::{accounts_login::LoginResponse, IGGetRequest, IGPostRequest, IGRequestMetadata},
+    utils::get_set_cookie_value,
 };
 use reqwest::{
     cookie::{CookieStore, Jar},
@@ -16,6 +17,7 @@ const BASE_IG_API_V1: &str = "https://i.instagram.com/api/v1/";
 pub mod igconstants;
 pub mod igdevice;
 pub mod igrequests;
+mod utils;
 
 #[derive(Debug)]
 pub enum IGClientErr {
@@ -65,6 +67,26 @@ impl IGClient {
         }
     }
 
+    pub async fn from_ig_client_config(ig_client_config: IGClientConfig) -> Result<Self> {
+        let cookie_store = Arc::new(Jar::default());
+
+        ig_client_config
+            .cookies_str
+            .split("; ")
+            .for_each(|s| cookie_store.add_cookie_str(s, &BASE_IG_API_V1.parse::<Url>().unwrap()));
+
+        let client = Client::builder()
+            .cookie_provider(Arc::clone(&cookie_store))
+            .build()
+            .unwrap();
+
+        Ok(IGClient {
+            client,
+            cookie_store,
+            ig_client_config: Arc::new(RwLock::new(ig_client_config)),
+        })
+    }
+
     pub async fn login(&self, username: &str, password: &str) -> Result<LoginResponse> {
         let qe_sync_response = self
             .post(&igrequests::qe_sync::QeRequest::new(
@@ -100,23 +122,6 @@ impl IGClient {
         }
     }
 
-    pub async fn with_ig_client_config(ig_client_config: IGClientConfig) -> Result<IGClient> {
-        let cookie_store = Arc::new(Jar::default());
-        
-        ig_client_config.cookies_str.split("; ").for_each(|s| cookie_store.add_cookie_str(s, &BASE_IG_API_V1.parse::<Url>().unwrap()));
-
-        let client = Client::builder()
-            .cookie_provider(Arc::clone(&cookie_store))
-            .build()
-            .unwrap();
-
-        Ok(IGClient {
-            client,
-            cookie_store,
-            ig_client_config: Arc::new(RwLock::new(ig_client_config)),
-        })
-    }
-
     pub async fn get<Req, Res>(
         &self,
         ig_request: &(dyn IGGetRequest<Req, Res> + Sync),
@@ -148,6 +153,7 @@ impl IGClient {
         // TODO: Replace with log
         // println!("Response {:#?}", response);
         let mut ig_client_config = self.ig_client_config.write().await;
+
         if let Some(csrftoken) = get_set_cookie_value(&response, "csrftoken") {
             ig_client_config.csrftoken = csrftoken;
         }
@@ -239,14 +245,4 @@ impl IGClientConfig {
             .find(|cookie| cookie.name() == name)
             .map(|cookie| cookie.value().to_string())
     }
-}
-
-fn get_set_cookie_value(response: &reqwest::Response, cookie_name: &str) -> Option<String> {
-    response
-        .headers()
-        .get_all(reqwest::header::SET_COOKIE)
-        .iter()
-        .map(|hv| cookie::Cookie::parse(hv.to_str().unwrap()).unwrap())
-        .find(|cookie| cookie.name() == cookie_name)
-        .map(|cookie| cookie.value().to_string())
 }

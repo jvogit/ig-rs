@@ -1,6 +1,6 @@
 use bytes::BytesMut;
 use packets::{connack_packet::ConnackPacket, connect_packet::ConnectPacket, ControlPacket};
-use std::{sync::Arc, fs::read};
+use std::{fs::read, sync::Arc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
     net::TcpStream,
@@ -66,11 +66,11 @@ impl IGMQTTClient {
     pub async fn connect(&self, ig_client_config: IGClientConfig) -> Result<()> {
         // TODO: edge-mqtt.facebook.com:443
         let stream = TcpStream::connect("edge-mqtt.facebook.com:443").await?;
-        let (reader_stream, writer_stream) = tokio::io::split(self
-            .config
-            .connect("edge-mqtt.facebook.com".try_into().unwrap(), stream)
-            .await?);
-
+        let (reader_stream, writer_stream) = tokio::io::split(
+            self.config
+                .connect("edge-mqtt.facebook.com".try_into().unwrap(), stream)
+                .await?,
+        );
         let logged_in_client = IGLoggedInMQTTClient {
             reader_stream: Arc::new(Mutex::new(reader_stream)),
             writer_stream: Arc::new(Mutex::new(writer_stream)),
@@ -126,9 +126,15 @@ impl IGLoggedInMQTTClient {
         loop {
             match client.read_packet().await {
                 Ok(response_packet) => {
-                    println!("Received packet during read packet task: {:?}", response_packet)
+                    println!(
+                        "Received packet during read packet task: {:?}",
+                        response_packet
+                    )
                 }
-                Err(err) => println!("Error occured during read packet task: {:?}", err),
+                Err(err) => {
+                    println!("Error occured during read packet task: {:?}", err);
+                    break;
+                }
             }
         }
 
@@ -170,7 +176,9 @@ impl IGLoggedInMQTTClient {
     }
 }
 
-async fn read_variable_length_encoding(stream: &mut ReadHalf<TlsStream<TcpStream>>) -> Result<usize> {
+async fn read_variable_length_encoding(
+    stream: &mut ReadHalf<TlsStream<TcpStream>>,
+) -> Result<usize> {
     let mut multipler: usize = 1;
     let mut value: usize = 0;
 

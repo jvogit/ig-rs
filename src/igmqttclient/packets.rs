@@ -6,6 +6,8 @@ pub mod connack_packet;
 pub mod connect_packet;
 pub mod pingreq_packet;
 pub mod pingres_packet;
+pub mod publish_packet;
+pub mod puback_packet;
 
 /// MQTT 3.1.1 Spec Control Packet interface
 pub trait ControlPacket {

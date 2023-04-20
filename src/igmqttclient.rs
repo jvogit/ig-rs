@@ -19,6 +19,7 @@ use tokio_rustls::{
 
 mod bytes_mut_write_transport;
 mod packets;
+pub mod packet_handlers;
 mod payloads;
 mod utils;
 

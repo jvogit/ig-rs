@@ -1,4 +1,5 @@
 use self::{
+    packet_handlers::PacketHandler,
     packets::{pingreq_packet::PingReqPacket, pingres_packet::PingResPacket},
     utils::read_variable_length_encoding,
 };
@@ -18,8 +19,8 @@ use tokio_rustls::{
 };
 
 mod bytes_mut_write_transport;
-mod packets;
 pub mod packet_handlers;
+mod packets;
 mod payloads;
 mod utils;
 
@@ -41,6 +42,7 @@ pub type Result<T> = std::result::Result<T, IGMQTTClientErr>;
 /// IGMQTTClient
 pub struct IGMQTTClient {
     config: TlsConnector,
+    handlers: Vec<Box<dyn PacketHandler + Send + Sync>>,
 }
 
 impl IGMQTTClient {
@@ -61,11 +63,16 @@ impl IGMQTTClient {
 
         IGMQTTClient {
             config: TlsConnector::from(Arc::new(config)),
+            handlers: vec![],
         }
     }
 
+    pub fn register_handler(&mut self, handler: Box<dyn PacketHandler + Send + Sync>) {
+        self.handlers.push(handler)
+    }
+
     /// Connects the client to the broker
-    pub async fn connect(&self, ig_client_config: IGClientConfig) -> Result<()> {
+    pub async fn connect(self, ig_client_config: IGClientConfig) -> Result<()> {
         // TODO: edge-mqtt.facebook.com:443
         let stream = TcpStream::connect("edge-mqtt.facebook.com:443").await?;
         let (reader_stream, writer_stream) = tokio::io::split(
@@ -77,6 +84,7 @@ impl IGMQTTClient {
             reader_stream: Arc::new(Mutex::new(reader_stream)),
             writer_stream: Arc::new(Mutex::new(writer_stream)),
             ig_client_config,
+            handlers: self.handlers,
         };
         let connect_packet = Box::new(ConnectPacket::new(&logged_in_client.ig_client_config));
 
@@ -104,6 +112,7 @@ struct IGLoggedInMQTTClient {
     reader_stream: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     writer_stream: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     ig_client_config: IGClientConfig,
+    handlers: Vec<Box<dyn PacketHandler + Send + Sync>>,
 }
 
 impl IGLoggedInMQTTClient {
@@ -126,12 +135,19 @@ impl IGLoggedInMQTTClient {
         });
 
         loop {
+            let client = &client;
             match client.read_packet().await {
                 Ok(response_packet) => {
                     println!(
                         "Received packet during read packet task: {:?}",
                         response_packet
-                    )
+                    );
+
+                    client
+                        .handlers
+                        .iter()
+                        .filter(|handler| handler.can_handle(&response_packet))
+                        .for_each(|handler| handler.handle(&response_packet));
                 }
                 Err(err) => {
                     println!("Error occured during read packet task: {:?}", err);

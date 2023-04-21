@@ -1,4 +1,6 @@
-use ig_rs::igclient::{IGClient, IGClientConfig, igrequests::direct_v2_inbox::DirectV2InboxRequest};
+use ig_rs::igclient::{
+    igrequests::direct_v2_inbox::DirectV2InboxRequest, IGClient, IGClientConfig,
+};
 use std::env;
 
 #[derive(Debug)]
@@ -64,11 +66,18 @@ async fn get_ig_client() -> Result<IGClient, IGCLIErr> {
 
 #[cfg(feature = "realtime")]
 async fn realtime() -> Result<(), IGCLIErr> {
-    use ig_rs::igmqttclient::IGMQTTClient;
-    
-    let mqtt_client = IGMQTTClient::new();
+    use ig_rs::igmqttclient::{
+        packet_handlers::ping_res_packet_handler::PingResPacketHandler, IGMQTTClient,
+    };
+
+    let mut mqtt_client = IGMQTTClient::new();
     let ig_client_config =
         serde_json::from_str::<IGClientConfig>(&env::var("IG_CLIENT_CONFIG").unwrap()[..]).unwrap();
+    mqtt_client.register_handler(Box::new(PingResPacketHandler {
+        handle: Box::new(|x| { println!("Received PingResPacket from handler!") }),
+        can_handle: Box::new(|_| true),
+    }));
+
     mqtt_client.connect(ig_client_config).await?;
 
     Ok(())

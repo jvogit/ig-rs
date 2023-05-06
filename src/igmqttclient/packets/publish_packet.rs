@@ -5,12 +5,12 @@ use crate::igmqttclient::utils::write_str;
 use super::ControlPacket;
 
 pub struct PublishPacket<'a> {
-    dup: bool,
-    qos: u8,
-    retain: bool,
-    topic_name: &'a str,
-    packet_identifier: Option<u16>,
-    payload: Bytes,
+    pub dup: bool,
+    pub qos: u8,
+    pub retain: bool,
+    pub topic_name: &'a str,
+    pub packet_identifier: Option<u16>,
+    pub payload: Bytes,
 }
 
 impl PublishPacket<'_> {

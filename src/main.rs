@@ -73,9 +73,10 @@ async fn realtime() -> Result<(), IGCLIErr> {
     let mut mqtt_client = IGMQTTClient::new();
     let ig_client_config =
         serde_json::from_str::<IGClientConfig>(&env::var("IG_CLIENT_CONFIG").unwrap()[..]).unwrap();
+
     mqtt_client.register_handler(Box::new(PingResPacketHandler {
-        handle: Box::new(|x| { println!("Received PingResPacket from handler!") }),
-        can_handle: Box::new(|_| true),
+        handle: Box::new(|_, _| println!("Received PingResPacket from handler!")),
+        can_handle: Box::new(|_, _| true),
     }));
 
     mqtt_client.connect(ig_client_config).await?;

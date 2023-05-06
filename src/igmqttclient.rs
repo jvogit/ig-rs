@@ -3,7 +3,7 @@ use self::{
     packets::{pingreq_packet::PingReqPacket, pingres_packet::PingResPacket},
     utils::read_variable_length_encoding,
 };
-use crate::igclient::IGClientConfig;
+use crate::{igclient::IGClientConfig, igmqttclient::packet_handlers::Context};
 use bytes::BytesMut;
 use packets::{connack_packet::ConnackPacket, connect_packet::ConnectPacket, ControlPacket};
 use std::sync::Arc;
@@ -108,7 +108,7 @@ impl IGMQTTClient {
     }
 }
 
-struct IGLoggedInMQTTClient {
+pub struct IGLoggedInMQTTClient {
     reader_stream: Arc<Mutex<ReadHalf<TlsStream<TcpStream>>>>,
     writer_stream: Arc<Mutex<WriteHalf<TlsStream<TcpStream>>>>,
     ig_client_config: IGClientConfig,
@@ -143,11 +143,13 @@ impl IGLoggedInMQTTClient {
                         response_packet
                     );
 
+                    let cx = Context { client };
+
                     client
                         .handlers
                         .iter()
-                        .filter(|handler| handler.can_handle(&response_packet))
-                        .for_each(|handler| handler.handle(&response_packet));
+                        .filter(|handler| handler.can_handle(&response_packet, &cx))
+                        .for_each(|handler| handler.handle(&response_packet, &cx));
                 }
                 Err(err) => {
                     println!("Error occured during read packet task: {:?}", err);

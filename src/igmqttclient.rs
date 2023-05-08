@@ -39,6 +39,17 @@ impl From<std::io::Error> for IGMQTTClientErr {
 
 pub type Result<T> = std::result::Result<T, IGMQTTClientErr>;
 
+fn do_packet_handlers(
+    handlers: &Vec<Box<dyn PacketHandler + Send + Sync>>,
+    packet: &Box<dyn std::any::Any + Send + Sync>,
+    cx: &Context,
+) {
+    handlers
+        .iter()
+        .filter(|handler| handler.can_handle(&packet, &cx))
+        .for_each(|handler| handler.handle(&packet, &cx));
+}
+
 /// IGMQTTClient
 pub struct IGMQTTClient {
     config: TlsConnector,
@@ -80,12 +91,12 @@ impl IGMQTTClient {
                 .connect("edge-mqtt.facebook.com".try_into().unwrap(), stream)
                 .await?,
         );
-        let logged_in_client = IGLoggedInMQTTClient {
+        let logged_in_client = Arc::new(IGLoggedInMQTTClient {
             reader_stream: Arc::new(Mutex::new(reader_stream)),
             writer_stream: Arc::new(Mutex::new(writer_stream)),
             ig_client_config,
             handlers: self.handlers,
-        };
+        });
         let connect_packet = Box::new(ConnectPacket::new(&logged_in_client.ig_client_config));
 
         println!("Connect packet: {:x}", connect_packet.as_bytes());
@@ -97,6 +108,15 @@ impl IGMQTTClient {
             if connack_packet.return_code != 0 {
                 return Err(IGMQTTClientErr::ConnackErr(connack_packet.return_code));
             }
+
+            // handle the connack packet
+            do_packet_handlers(
+                &logged_in_client.handlers,
+                &response_packet,
+                &Context {
+                    client: &logged_in_client,
+                },
+            );
 
             return logged_in_client.connect().await;
         } else {
@@ -116,9 +136,8 @@ pub struct IGLoggedInMQTTClient {
 }
 
 impl IGLoggedInMQTTClient {
-    async fn connect(self) -> Result<()> {
-        let client = Arc::new(self);
-        let ping_client = client.clone();
+    async fn connect(self: Arc<Self>) -> Result<()> {
+        let ping_client = self.clone();
         let ping_task_handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
 
@@ -135,21 +154,16 @@ impl IGLoggedInMQTTClient {
         });
 
         loop {
-            let client = &client;
-            match client.read_packet().await {
+            match &self.read_packet().await {
                 Ok(response_packet) => {
                     println!(
                         "Received packet during read packet task: {:?}",
                         response_packet
                     );
 
-                    let cx = Context { client };
+                    let cx = Context { client: &self };
 
-                    client
-                        .handlers
-                        .iter()
-                        .filter(|handler| handler.can_handle(&response_packet, &cx))
-                        .for_each(|handler| handler.handle(&response_packet, &cx));
+                    do_packet_handlers(&self.handlers, &response_packet, &cx);
                 }
                 Err(err) => {
                     println!("Error occured during read packet task: {:?}", err);

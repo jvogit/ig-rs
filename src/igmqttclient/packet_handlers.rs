@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use super::IGLoggedInMQTTClient;
 
-pub mod ping_res_packet_handler;
+pub mod connack_packet_handler;
+pub mod pingres_packet_handler;
 pub mod publish_packet_handler;
 
 pub struct Context<'a> {

@@ -67,13 +67,20 @@ async fn get_ig_client() -> Result<IGClient, IGCLIErr> {
 #[cfg(feature = "realtime")]
 async fn realtime() -> Result<(), IGCLIErr> {
     use ig_rs::igmqttclient::{
-        packet_handlers::ping_res_packet_handler::PingResPacketHandler, IGMQTTClient,
+        packet_handlers::{
+            connack_packet_handler::ConnackPacketHandler,
+            pingres_packet_handler::PingResPacketHandler,
+        },
+        IGMQTTClient,
     };
 
     let mut mqtt_client = IGMQTTClient::new();
     let ig_client_config =
         serde_json::from_str::<IGClientConfig>(&env::var("IG_CLIENT_CONFIG").unwrap()[..]).unwrap();
 
+    mqtt_client.register_handler(Box::new(ConnackPacketHandler::handle(|packet, cx| {
+        println!("CONNACK Packet {:?}", packet)
+    })));
     mqtt_client.register_handler(Box::new(PingResPacketHandler {
         handle: Box::new(|_, _| println!("Received PingResPacket from handler!")),
         can_handle: Box::new(|_, _| true),
